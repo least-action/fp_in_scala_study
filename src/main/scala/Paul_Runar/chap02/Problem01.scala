@@ -10,4 +10,8 @@ object Problem01 {
 
     go(n, 0, 1)
   }
+
+  def main(args: Array[String]): Unit = {
+    println(fibonacci(10))
+  }
 }
