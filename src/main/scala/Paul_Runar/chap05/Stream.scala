@@ -6,14 +6,6 @@ sealed trait Stream[+A] {
     case Cons(h, _) => Some(h())
   }
 
-  def cons(hd: => A, tl: => Stream[A]): Stream[A] = {
-    lazy val head = hd
-    lazy val tail = tl
-    Cons(() => head, () => tail)
-  }
-
-  def empty: Stream[A] = Empty
-
   def toList: List[A] = {
     @scala.annotation.tailrec
     def loop(a: Stream[A], acc: List[A]): List[A] = a match {
@@ -99,7 +91,7 @@ sealed trait Stream[+A] {
     }
 
   def foldRight[B](z: => B)(f: (A, => B) => B): B = this match {
-    case Cons(h, t) if (t() != Empty) => f(h(), t().foldRight(z)(f))
+    case Cons(h, t) => f(h(), t().foldRight(z)(f))
     case _ => z
   }
 
@@ -124,11 +116,13 @@ sealed trait Stream[+A] {
     foldRight(Empty: Stream[B])((a, z) => Cons(() => f(a), () => z))
 
   def filter(f: A => Boolean): Stream[A] =
-    foldRight(Empty: Stream[A])((a, z) => ???)
+    foldRight(Empty: Stream[A])((a, z) => if (f(a)) Cons(() => a, () => z) else z)
 
-  def append[B>:A](s: => Stream[B]): Stream[B] = ???
+  def append[B>:A](s: => Stream[B]): Stream[B] =
+    foldRight(s)((a, z) => Cons(() => a, () => z))
 
-  def flatMap[B](f: A => Stream[B]): Stream[B] = ???
+  def flatMap[B](f: A => Stream[B]): Stream[B] =
+    foldRight(Empty: Stream[B])((a, z) => f(a).append(z))
 }
 case object Empty extends Stream[Nothing]
 case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
@@ -139,6 +133,8 @@ object Stream {
     lazy val tail = tl
     Cons(() => head, () => tail)
   }
+
+  def empty[A]: Stream[A] = Empty
 
   def apply[A](as: A*): Stream[A] =
     if (as.isEmpty) empty else cons(as.head, apply(as.tail: _*))

@@ -7,6 +7,5 @@ object Problem06 {
     val c = Stream(None, 1, 2, 3)
     assert(a.headOptionViaFoldRight.contains(1))
     assert(b.headOptionViaFoldRight.isEmpty)
-    println(c.headOptionViaFoldRight)
   }
 }
