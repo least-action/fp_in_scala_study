@@ -21,6 +21,8 @@ object Problem08 {
     println(mkPerson("", 10))
     println(mkPerson("tom", -10))
     println(mkPerson("", -10))
+
+    Stream
   }
 }
 
