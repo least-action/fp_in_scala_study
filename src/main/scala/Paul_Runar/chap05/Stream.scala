@@ -164,7 +164,31 @@ sealed trait Stream[+A] {
     })
   }
 
-  def startsWith[B >: A](s: Stream[B]): Boolean = ???
+  def startsWith[B >: A](s: Stream[B]): Boolean =
+    zipAll(s).takeWhile(_._2.isDefined).forAll({ case (v1, v2) => v1 == v2})
+
+  def startsWith_[B >: A](s: Stream[B]): Boolean =
+    Stream.unfold((this, s))({
+      case (_, Empty) => None
+      case (Cons(h1, t1), Cons(h2, t2)) => Some((h1() == h2(), (t1(), t2())))
+    }).forAll(x => x)
+
+  def tails: Stream[Stream[A]] =
+    Stream.unfold(this) {
+      case Empty => None
+      case s => Some((s, s drop 1))
+    } append Stream(Stream.empty)
+
+  def tailss: Stream[Stream[A]] =
+    Stream.unfold(this)({
+      case Cons(h, t) => Some((Cons(h, t), t()))
+      case _ => None
+    }).append(Stream(Empty))
+
+  def hasSequence[B>:A](s: Stream[B]): Boolean =
+    tails exists (_ startsWith s)
+
+  def scanRight[B](z: B)(f: (A, => B) => B): Stream[B] = ???
 }
 case object Empty extends Stream[Nothing]
 case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
