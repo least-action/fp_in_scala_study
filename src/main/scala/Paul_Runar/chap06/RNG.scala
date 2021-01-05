@@ -12,3 +12,45 @@ case class SimpleRNG(seed: Long) extends RNG {
     (n, nextRNG)
   }
 }
+
+object RNG {
+  def nonNegativeInt(rng: RNG): (Int, RNG) = {
+    val (i, r) = rng.nextInt
+    (if (i < 0) -(i+1) else i, r)
+  }
+
+  def double(rng: RNG): (Double, RNG) = {
+    val (i, r) = nonNegativeInt(rng)
+    (i.toDouble / (Int.MaxValue.toDouble + 1), r)
+  }
+
+  def intDouble(rng: RNG): ((Int, Double), RNG) = {
+    val (i, r1) = rng.nextInt
+    val (j, r2) = double(r1)
+    ((i, j), r2)
+  }
+
+  def doubleInt(rng: RNG): ((Double, Int), RNG) = {
+    val ((i, d), r) = intDouble(rng)
+    ((d, i), r)
+  }
+
+  def double3(rng: RNG): ((Double, Double, Double), RNG) = {
+    val (i, r1) = double(rng)
+    val (j, r2) = double(r1)
+    val (k, r3) = double(r2)
+    ((i, j, k), r3)
+  }
+
+  def ints(count: Int)(rng: RNG): (List[Int], RNG) = {
+    @scala.annotation.tailrec
+    def loop(c: Int, r: RNG, l: List[Int]): (List[Int], RNG) = {
+      if (c <= 0) (l, r)
+      else {
+        val (i, rr) = r.nextInt
+        loop(c-1, rr, i :: l)
+      }
+    }
+    loop(count, rng, Nil)
+  }
+}
