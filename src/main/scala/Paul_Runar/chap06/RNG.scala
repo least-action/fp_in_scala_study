@@ -15,6 +15,7 @@ case class SimpleRNG(seed: Long) extends RNG {
 
 object RNG {
   type Rand[+A] = RNG => (A, RNG)
+//  type Rand[A] = State[RNG, A]
 
   def int(rng: RNG): (Int, RNG) =
     rng.nextInt
