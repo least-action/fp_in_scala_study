@@ -9,6 +9,7 @@ object Prop {
   type FailedCase = String
   type SuccessCount = Int
   type TestCases = Int
+  type MaxSize = Int
 
   sealed trait Result {
     def isFalsified: Boolean
@@ -20,8 +21,24 @@ object Prop {
     override def isFalsified: Boolean = true
   }
 
+  def forAll[A](g: SGen[A])(f: A => Boolean): Prop =
+    forAll(g(_))(f)
+
+  def forAll[A](g: Int => Gen[A])(f: A => Boolean): Prop = Prop {
+    (max, n, rng) => {
+      val casesPerSize = (n + (max - 1)) / max
+      val props: Stream[Prop] =
+        Stream.from(0).take((n min max) + 1).map(i => forAll(g(i))(f))
+      val prop: Prop =
+        props.map(p => Prop { (max, _, rng) =>
+          p.run(max, casesPerSize, rng)
+        }).toList.reduce(_ && _)
+      prop.run(max, n , rng)
+    }
+  }
+
   def forAll[A](as: Gen[A])(f: A => Boolean): Prop = Prop {
-    (n, rng) => {
+    (max, n, rng) => {
       randomStream(as)(rng).zip(Stream.from(0)).take(n).map {
         case (a, i) => try {
           if (f(a)) Passed
@@ -39,25 +56,36 @@ object Prop {
     s"test case: $s\n" +
       s"generated an exception : ${e.getMessage}\n" +
       s"stack trace:\n ${e.getStackTrace.mkString("\n")}"
+
+  def run(p: Prop,
+         maxSize: Int = 100,
+         testCases: Int = 100,
+         rng: RNG = RNG.Simple(System.currentTimeMillis)): Unit =
+    p.run(maxSize, testCases, rng) match {
+      case Falsified(msg, n) =>
+        println(s"! Falsified after $n passed tests:\n $msg")
+      case Passed =>
+        println(s"+ OK, passed $testCases tests.")
+    }
 }
 
-case class Prop(run: (TestCases, RNG) => Result) {
+case class Prop(run: (MaxSize, TestCases, RNG) => Result) {
   def &&(p: Prop): Prop = Prop {
-    (n, rng) => run(n, rng) match {
-      case Passed => p.run(n, rng)
+    (max, n, rng) => run(max, n, rng) match {
+      case Passed => p.run(max, n, rng)
       case x => x
     }
   }
 
   def ||(p: Prop): Prop = Prop {
-    (n, rng) => run(n, rng) match {
-      case Falsified(msg, _) => p.tag(msg).run(n, rng)
+    (max, n, rng) => run(max, n, rng) match {
+      case Falsified(msg, _) => p.tag(msg).run(max, n, rng)
       case x => x
     }
   }
 
   def tag(msg: String): Prop = Prop {
-    (n, rng) => run(n, rng) match {
+    (max, n, rng) => run(max, n, rng) match {
       case Falsified(f, s) => Falsified(msg + '\n' + f, s)
       case x => x
     }
@@ -68,12 +96,16 @@ case class Gen[+A](sample: State[RNG, A]) {
   def flatMap[B](f: A => Gen[B]): Gen[B] =
     Gen(sample.flatMap(a => f(a).sample))
 
+  def listOfN(size: Int): Gen[List[A]] =
+    Gen.listOfN(size, this)
+
   def listOfN(size: Gen[Int]): Gen[List[A]] =
     size.flatMap(i => Gen.listOfN(i, this))
+
+  def unsized: SGen[A] = SGen(_ => this)
 }
 
 object Gen {
-  def listOf[A](n: Int, a: Gen[A]): Gen[List[A]] = ???
   def forAll[A](a: Gen[A])(f: A => Boolean): Prop = ???
 
   def choose(start: Int, stopExclusive: Int): Gen[Int] = {
@@ -85,6 +117,10 @@ object Gen {
   def boolean: Gen[Boolean] = Gen(State(RNG.int).map(_ > 0))
   def listOfN[A](n: Int, g: Gen[A]): Gen[List[A]] =
     Gen(State.sequence(List.fill(n)(g.sample)))
+
+  def listOf[A](g: Gen[A]): SGen[List[A]] = SGen {
+    i => g.listOfN(i)
+  }
 
   def union[A](g1: Gen[A], g2: Gen[A]): Gen[A] =
     Gen.boolean.flatMap(b => if (b) g1 else g2)
@@ -98,4 +134,8 @@ object Gen {
     Gen(State(RNG.double).map(weightedSelect(g1._2, g2._2))).flatMap((b: Boolean) => if (b) g1._1 else g2._1)
   }
 
+}
+
+case class SGen[+A](g: Int => Gen[A]) {
+  def apply(n: Int): Gen[A] = g(n)
 }
